@@ -1,0 +1,88 @@
+-- Check data structure in Query editor 
+SELECT *
+FROM hr
+LIMIT 5;
+
+SELECT *
+FROM sales
+LIMIT 5;
+
+-- description of data set
+-- HR data table describe sales employee(=deal_owner_id) first day of work(=deal_owner_hiring_date). Hiring date is ranged from 2018-10-01 to 2022-01-03, with one employee missing hiring date. 
+-- Sales data table contains three dates related column - 1) lead_date 2) trial_date 3)customer_date. Normally sales generated in the order of 1)-> 2)->3). rest of three column describes 4) region(region where sales happened) 5) requested_trial_session_subject 6)deal owner_id.
+-- Common column: Two table has common column of deal_owner_id where it contains unique identier of sales employee. 
+
+
+-- Clean up date related columns in workable format with year and month only 
+UPDATE sales
+SET lead_date=substr(lead_date, 1, 10), trial_date=substr(trial_date, 1, 10), customer_date=substr(customer_date, 1, 10)
+
+
+-- Create HR and Sales Data combined table to export into CSV for further visualizations
+
+CREATE TABLE sales_hrs AS
+SELECT HR.deal_owner_id,deal_id,lead_date,trial_date,customer_date,
+CASE WHEN trial_date='NA' THEN 0 ELSE 1 END AS trial_date_count,
+CASE WHEN customer_date='NA' THEN 0 ELSE 1 END AS customer_date_count,
+total_binding_purchase_value,
+region,
+requested_trial_session_subject,
+deal_owner_hiring_date
+FROM sales
+LEFT JOIN HR
+ON HR.deal_owner_id = Sales.deal_owner_id
+WHERE hr.deal_owner_hiring_date!='NA'
+
+
+-- Take care of NULL Values in total_biding_purchase_value to replace by 0
+
+UPDATE sales_hr SET total_binding_purchase_value=0 WHERE total_binding_purchase_value='NA'
+
+-- Check out combined table format to see if data is good to be aggregated
+
+SELECT *
+FROM sales_hr
+
+-- Final data table needed for presentation- Part 2
+SELECT 
+lead_date,
+deal_owner_id,
+SUM(customer_date_count)/COUNT(lead_date) as lead_conversion_rate,
+SUM(trial_date_count)/COUNT(lead_date) AS lead_to_trial_rate,
+SUM(customer_date_count)/SUM(trial_date_count) AS trial_to_customer_rate,
+AVG(seniority_in_Week) AS sales_employee_seniority,
+AVG(total_binding_purchase_value) AS average_TCV_amount,
+Seniority_in_week
+
+FROM sales_hr
+GROUP BY
+lead_date,
+deal_owner_id,
+Seniority_in_week
+
+-- Query for DACH region new hire TVC
+SELECT 
+deal_owner_hiring_date, total_binding_purchase_value, customer_date,region
+FROM sales_hr
+WHERE (DATE(customer_date,'-1 months') <= deal_owner_hiring_date AND DATE(customer_date,'-1 months') <= customer_date)
+AND region='DACH'
+
+WITH CTE AS (
+SELECT deal_owner_id, substr(lead_date, 1, 7) as customer_month_year,sales_hr.total_binding_purchase_value
+FROM sales_hr)
+SELECT 
+AVG(total_binding_purchase_value),
+deal_owner_id,
+customer_month_year
+FROM CTE
+GROUP BY 
+customer_month_year,
+deal_owner_id
+
+
+WITH CTE AS (
+SELECT deal_owner_id, substr(lead_date, 1, 7) as customer_month_year,sales_hr.total_binding_purchase_value
+FROM sales_hr)
+SELECT AVG(total_binding_purchase_value)
+FROM CTE
+
